@@ -69,12 +69,17 @@ cargo build --locked -p stellar-private-payments-web $CARGO_PROFILE_FLAG --targe
 echo "==> Building prover-worker ($PROVER_PROFILE)..."
 cargo build --locked -p stellar-private-payments-web $PROVER_PROFILE_FLAG --target "$TARGET" --bin prover-worker $CARGO_FEATURE_FLAGS
 
-# Opt-in: SPP_WEB_THREADS=1 also builds a prover worker that proves on a rayon
-# pool of Web Workers sharing one wasm memory. Only cross-origin isolated pages
-# can run it, so it ships beside the serial worker, not instead of it.
+# Also build a prover worker that proves on a rayon pool of Web Workers sharing
+# one wasm memory. Only cross-origin isolated pages can run it, so it ships
+# beside the serial worker, not instead of it. SPP_WEB_THREADS=0 leaves it out,
+# for a quicker build or a toolchain without the `rust-src` component.
+THREADS=1
+if [[ "${SPP_WEB_THREADS:-1}" == "0" ]]; then
+  THREADS=0
+fi
 THREADS_TARGET_DIR="$CARGO_TARGET_DIR/web-threads"
 THREADS_WASM="$THREADS_TARGET_DIR/$TARGET/$PROVER_PROFILE/prover-worker-threads.wasm"
-if [[ "${SPP_WEB_THREADS:-0}" == "1" ]]; then
+if [[ "$THREADS" == "1" ]]; then
   # Appended to the rustflags in .cargo/config.toml, which already sets the
   # `--max-memory` that a shared memory has to declare.
   THREADS_RUSTFLAGS=(
@@ -249,7 +254,7 @@ EOF
 write_worker_loader storage-worker
 write_worker_loader prover-worker
 
-if [[ "${SPP_WEB_THREADS:-0}" == "1" ]]; then
+if [[ "$THREADS" == "1" ]]; then
   wasm-bindgen --target web --out-dir "$WEB/dist/workers" --out-name prover-worker-threads-module "$THREADS_WASM"
   # The pool's threads are started by this wasm-bindgen-rayon snippet, which is
   # only there if the worker really was compiled with atomics. RUSTFLAGS in the
@@ -264,13 +269,29 @@ if [[ "${SPP_WEB_THREADS:-0}" == "1" ]]; then
   write_worker_loader prover-worker-threads
 fi
 
+# js/index.js reads this to know whether a threaded worker is part of the
+# build, without probing for it over the network. It is a module so that it
+# works unbundled and bundled alike; the URL sits here, not in index.js, so a
+# bundler only ever sees a `new URL` for a file that exists.
+if [[ "$THREADS" == "1" ]]; then
+  cat >"$WEB/dist/prover-threads.js" <<'EOF'
+export const threadedProverWorkerUrl =
+  new URL('./workers/prover-worker-threads.js', import.meta.url).href;
+EOF
+else
+  cat >"$WEB/dist/prover-threads.js" <<'EOF'
+export const threadedProverWorkerUrl = null;
+EOF
+fi
+
 echo "==> Staging bundled circuit artifacts..."
 bash "$WEB/scripts/stage-circuits-dist.sh"
 
 echo "==> Staging wasm-bindgen TypeScript declarations..."
 bash "$WEB/scripts/stage-wasm-types.sh"
 
-# Shared with Trunk.toml and the Makefile; includes both wasm profiles.
+# Shared with Trunk.toml and the Makefile; includes both wasm profiles and
+# whether the threaded prover worker was built.
 sh "$WEB/scripts/profile-key.sh" > "$WEB/.trunk-wasm-profile"
 
 echo "==> Built sdk/web/dist/"

@@ -10,5 +10,5 @@ fn main() {
     // Without atomics there is no shared memory to run a pool on, and a worker
     // that never registers would only show up as timeouts.
     #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
-    panic!("prover-worker-threads needs atomics; build it with SPP_WEB_THREADS=1");
+    panic!("prover-worker-threads needs atomics; build it with scripts/build.sh");
 }

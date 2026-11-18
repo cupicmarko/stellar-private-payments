@@ -25,6 +25,11 @@ name = "prover-worker-threads"
 path = "src/bin/prover_worker_threads.rs"
 required-features = ["threads"]
 
+[[bin]]
+name = "prover-driver"
+path = "src/bin/prover_driver.rs"
+required-features = ["prover-driver"]
+
 [features]
 default = ["encrypted-storage"]
 # SQLite3MC-encrypted OPFS storage (`Storage.open`).
@@ -37,8 +42,8 @@ unencrypted-storage = ["stellar-private-payments/unencrypted-storage"]
 # Multi-threaded proving for the `prover-worker-threads` binary: the SDK's
 # chunked-MSM proof assembly on a rayon pool whose threads are Web Workers
 # sharing one wasm memory. The pool needs atomics and a std rebuilt with them,
-# which `scripts/build.sh` sets up under `SPP_WEB_THREADS=1`; without atomics the
-# feature still compiles but starts no pool. Never enable
+# which `scripts/build.sh` sets up (unless `SPP_WEB_THREADS=0`); without atomics
+# the feature still compiles but starts no pool. Never enable
 # `stellar-private-payments/parallel` here: `ark-ec`'s parallel MSM spawns a
 # thread pool of its own and panics on wasm32.
 threads = [
@@ -47,6 +52,11 @@ threads = [
     "stellar-private-payments/parallel-chunked-msm",
     "web-sys/WorkerNavigator",
 ]
+# The `prover-driver` binary, which the prover browser test and benchmark
+# (`scripts/prover-browser.js`) load to prove on a worker of their choice. Not
+# part of the SDK. A feature, not an example, so that building it reuses the
+# SDK's build instead of rebuilding it with the dev-dependencies.
+prover-driver = []
 
 [dependencies]
 stellar-private-payments = { workspace = true }
