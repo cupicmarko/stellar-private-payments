@@ -2,7 +2,7 @@
 /**
  * Verify required SDK artifacts exist before `tsc` (CI / prepublish).
  */
-import { access } from 'node:fs/promises';
+import { access, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -14,6 +14,9 @@ const required = [
   'dist/stellar_private_payments_web.d.ts',
   'dist/workers/storage-worker.js',
   'dist/workers/prover-worker.js',
+  'dist/workers/prover-worker-threads.js',
+  'dist/workers/prover-worker-threads-module.js',
+  'dist/workers/prover-worker-threads-module_bg.wasm',
   'dist/prover-threads.js',
   'dist/circuits/circuits.json',
   'dist/circuits/policy_tx_2_2.graph.bin',
@@ -83,23 +86,25 @@ for (const rel of required) {
   }
 }
 
-// A build has the threaded prover worker only with SPP_WEB_THREADS=1, and
-// prover-threads.js says which. Either is fine, but the two must agree.
+// The SDK ships the threaded prover worker, and the marker must name it.
+// SPP_WEB_THREADS=0 builds without it, for local use only.
 const marker = path.join(root, '..', 'dist/prover-threads.js');
 const { threadedProverWorkerUrl } = await import(pathToFileURL(marker).href);
-const threaded = [
-  'dist/workers/prover-worker-threads.js',
-  'dist/workers/prover-worker-threads-module.js',
-  'dist/workers/prover-worker-threads-module_bg.wasm',
-];
-for (const rel of threaded) {
-  const present = await access(path.join(root, '..', rel), constants.R_OK).then(() => true, () => false);
-  if (present !== Boolean(threadedProverWorkerUrl)) {
-    console.error(
-      threadedProverWorkerUrl
-        ? `missing ${rel} — dist/prover-threads.js names a threaded prover worker`
-        : `unexpected ${rel} — dist/prover-threads.js says this build has no threaded prover worker`,
-    );
-    process.exit(1);
-  }
+if (!threadedProverWorkerUrl) {
+  console.error('dist/prover-threads.js names no threaded prover worker — run npm run build without SPP_WEB_THREADS=0');
+  process.exit(1);
+}
+// wasm-bindgen-rayon starts the pool's threads from this snippet.
+const snippets = await readdir(path.join(root, '..', 'dist/workers/snippets')).catch(() => []);
+const rayonSnippet = snippets.find((name) => name.startsWith('wasm-bindgen-rayon-'));
+if (!rayonSnippet) {
+  console.error('missing dist/workers/snippets/wasm-bindgen-rayon-* — run npm run build');
+  process.exit(1);
+}
+const rayonHelpers = `dist/workers/snippets/${rayonSnippet}/src/workerHelpers.no-bundler.js`;
+try {
+  await access(path.join(root, '..', rayonHelpers), constants.R_OK);
+} catch {
+  console.error(`missing ${rayonHelpers} — run npm run build`);
+  process.exit(1);
 }

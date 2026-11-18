@@ -11,6 +11,8 @@ const required = new Set([
   'package.json', 'js/index.js', 'js/types/api-types.d.ts',
   'dist/stellar_private_payments_web.js', 'dist/stellar_private_payments_web_bg.wasm', 'dist/prover-threads.js',
   'dist/workers/storage-worker-module.js', 'dist/workers/storage-worker-module_bg.wasm',
+  'dist/workers/prover-worker-threads.js', 'dist/workers/prover-worker-threads-module.js',
+  'dist/workers/prover-worker-threads-module_bg.wasm',
   'dist/circuits/NOTICE.txt', 'dist/circuits/source-bundle.tar.gz',
 ]);
 
@@ -25,14 +27,12 @@ function npmPack(...args) {
   return packages[0];
 }
 
-// Present only in a build made with SPP_WEB_THREADS=1.
-const threadedFiles = [
-  'dist/workers/prover-worker-threads.js', 'dist/workers/prover-worker-threads-module.js',
-  'dist/workers/prover-worker-threads-module_bg.wasm',
-];
-
 function verifyNames(names) {
   for (const name of required) if (!names.has(name)) throw new Error(`package is missing ${name}`);
+  // wasm-bindgen-rayon starts the threaded prover worker's pool from this snippet.
+  if (![...names].some((name) => /^dist\/workers\/snippets\/wasm-bindgen-rayon-[^/]+\/src\/workerHelpers\.no-bundler\.js$/.test(name))) {
+    throw new Error('package is missing the wasm-bindgen-rayon worker snippet');
+  }
   for (const name of names) {
     if (isAbsolute(name) || name.split('/').includes('..') || name.includes('test-sqlite3mc') || name.startsWith('scripts/')) {
       throw new Error(`unexpected package entry: ${name}`);
@@ -41,17 +41,16 @@ function verifyNames(names) {
 }
 
 function verify(read, names) {
-  // The marker says whether the package has the threaded prover worker; the files must agree.
-  const threaded = !read('dist/prover-threads.js').toString().includes('threadedProverWorkerUrl = null');
-  for (const name of threadedFiles) {
-    if (names.has(name) !== threaded) throw new Error(`${name} ${threaded ? 'is missing from' : 'does not belong in'} the package`);
+  // The facade only uses the threaded prover worker if the marker names it.
+  if (read('dist/prover-threads.js').toString().includes('threadedProverWorkerUrl = null')) {
+    throw new Error('dist/prover-threads.js names no threaded prover worker');
   }
   const bindings = read('dist/stellar_private_payments_web.js').toString();
   for (const method of ['static open(']) {
     if (!bindings.includes(method)) throw new Error(`WASM bindings lack ${method}`);
   }
   if (!read('js/index.js').toString().includes('keyProvider')) throw new Error('JavaScript facade lacks encrypted storage access');
-  for (const name of ['dist/stellar_private_payments_web_bg.wasm', 'dist/workers/storage-worker-module_bg.wasm']) {
+  for (const name of ['dist/stellar_private_payments_web_bg.wasm', 'dist/workers/storage-worker-module_bg.wasm', 'dist/workers/prover-worker-threads-module_bg.wasm']) {
     if (!read(name).subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) throw new Error(`invalid WASM artifact: ${name}`);
   }
 }
