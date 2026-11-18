@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const web = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const required = new Set([
   'package.json', 'js/index.js', 'js/types/api-types.d.ts',
-  'dist/stellar_private_payments_web.js', 'dist/stellar_private_payments_web_bg.wasm',
+  'dist/stellar_private_payments_web.js', 'dist/stellar_private_payments_web_bg.wasm', 'dist/prover-threads.js',
   'dist/workers/storage-worker-module.js', 'dist/workers/storage-worker-module_bg.wasm',
   'dist/circuits/NOTICE.txt', 'dist/circuits/source-bundle.tar.gz',
 ]);
@@ -25,6 +25,12 @@ function npmPack(...args) {
   return packages[0];
 }
 
+// Present only in a build made with SPP_WEB_THREADS=1.
+const threadedFiles = [
+  'dist/workers/prover-worker-threads.js', 'dist/workers/prover-worker-threads-module.js',
+  'dist/workers/prover-worker-threads-module_bg.wasm',
+];
+
 function verifyNames(names) {
   for (const name of required) if (!names.has(name)) throw new Error(`package is missing ${name}`);
   for (const name of names) {
@@ -34,7 +40,12 @@ function verifyNames(names) {
   }
 }
 
-function verify(read) {
+function verify(read, names) {
+  // The marker says whether the package has the threaded prover worker; the files must agree.
+  const threaded = !read('dist/prover-threads.js').toString().includes('threadedProverWorkerUrl = null');
+  for (const name of threadedFiles) {
+    if (names.has(name) !== threaded) throw new Error(`${name} ${threaded ? 'is missing from' : 'does not belong in'} the package`);
+  }
   const bindings = read('dist/stellar_private_payments_web.js').toString();
   for (const method of ['static open(']) {
     if (!bindings.includes(method)) throw new Error(`WASM bindings lack ${method}`);
@@ -49,7 +60,7 @@ const outputIndex = process.argv.indexOf('--output-directory');
 const dryRun = npmPack('--dry-run');
 const names = new Set(dryRun.files.map(({ path }) => path));
 verifyNames(names);
-verify((name) => readFileSync(join(web, name)));
+verify((name) => readFileSync(join(web, name)), names);
 const report = { passed: true, mode: 'dry-run', files: names.size };
 
 if (outputIndex !== -1) {
@@ -63,7 +74,7 @@ if (outputIndex !== -1) {
   if (entries.some((name) => !name.startsWith('package/') || name.endsWith('/'))) throw new Error('unexpected npm archive member');
   const archiveNames = new Set(entries.map((name) => name.slice('package/'.length)));
   verifyNames(archiveNames);
-  verify((name) => execFileSync('tar', ['-xOzf', archive, `package/${name}`], { maxBuffer: 16 * 1024 * 1024 }));
+  verify((name) => execFileSync('tar', ['-xOzf', archive, `package/${name}`], { maxBuffer: 16 * 1024 * 1024 }), archiveNames);
   Object.assign(report, {
     mode: 'archive', archive: packed.filename,
     sha256: createHash('sha256').update(readFileSync(archive)).digest('hex'),

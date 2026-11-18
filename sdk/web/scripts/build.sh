@@ -264,6 +264,21 @@ if [[ "${SPP_WEB_THREADS:-0}" == "1" ]]; then
   write_worker_loader prover-worker-threads
 fi
 
+# js/index.js reads this to know whether a threaded worker is part of the
+# build, without probing for it over the network. It is a module so that it
+# works unbundled and bundled alike; the URL sits here, not in index.js, so a
+# bundler only ever sees a `new URL` for a file that exists.
+if [[ "${SPP_WEB_THREADS:-0}" == "1" ]]; then
+  cat >"$WEB/dist/prover-threads.js" <<'EOF'
+export const threadedProverWorkerUrl =
+  new URL('./workers/prover-worker-threads.js', import.meta.url).href;
+EOF
+else
+  cat >"$WEB/dist/prover-threads.js" <<'EOF'
+export const threadedProverWorkerUrl = null;
+EOF
+fi
+
 echo "==> Staging bundled circuit artifacts..."
 bash "$WEB/scripts/stage-circuits-dist.sh"
 

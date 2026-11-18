@@ -541,6 +541,16 @@ impl ProverBridge {
             .map_err(|e| JsError::new(&e.to_string()))
     }
 
+    /// Sets the thread pool size of a threaded prover worker, which clamps it
+    /// to `1..=hardwareConcurrency`, and resolves to the size it will use.
+    /// Rejects on the serial worker and after the first proof.
+    #[wasm_bindgen(js_name = configureThreads)]
+    pub async fn configure_threads_js(&self, threads: u32) -> Result<u32, JsError> {
+        self.configure_threads(threads)
+            .await
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
     #[wasm_bindgen(js_name = toHandle)]
     pub fn to_handle(&self) -> ProverHandle {
         ProverHandle::new(self.clone().into())

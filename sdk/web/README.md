@@ -181,6 +181,19 @@ only exists once `scripts/stage-wasm-types.sh` has staged it from `dist/`.
 
 Web Workers run the OPFS SQLite storage backend and Groth16 prover off the main thread. `Storage.open()` and `Client.new()` resolve default worker URLs relative to `import.meta.url` (overridable via `workerUrl`, `storageWorkerUrl`, and `proverWorkerUrl`). When `Client.new()` opens storage itself instead of receiving a `storage` handle, pass `keyProvider` in its options.
 
+### Multi-threaded proving
+
+A build made with `SPP_WEB_THREADS=1` also ships a prover worker that proves on a pool of Web Workers sharing one memory. `Client.new()` picks it by itself when the page is cross-origin isolated, that is when `crossOriginIsolated` is `true` in the console, which needs both response headers on the page and on its workers:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Everything the page loads must then be same-origin or opt in with CORS or `Cross-Origin-Resource-Policy`. On a page that is not isolated, in a build without the threaded worker, or if the threaded worker fails to start (the SDK logs a warning), proofs run on one thread on the serial worker exactly as before. Threads never change the result of a proof.
+
+`proverThreads` on `Client.new()` (and `verifySelectiveDisclosure()`) tunes this: `false` or `1` forces the serial worker, a larger number caps the pool (it is clamped to the logical cores), `true` or omitted means all of them. An explicit `proverWorkerUrl` is used as given. `client.proverInfo()` returns `{ mode: 'serial' | 'threaded' | 'custom', threads }`.
+
 ## Build & publish (maintainers)
 
 Browser builds compile SQLite3MC through `sqlite-wasm-rs` (`sqlite3mc` feature), which requires Clang and `llvm-ar` (or `ar`). Building the npm package from source also requires `wasm-bindgen-cli` and [Binaryen](https://github.com/WebAssembly/binaryen) `wasm-opt` (see [CONTRIBUTING.md](../../CONTRIBUTING.md)):
