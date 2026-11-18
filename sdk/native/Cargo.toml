@@ -30,7 +30,9 @@ encrypted-storage = [
 ]
 # Plaintext wallet storage using rusqlite's bundled SQLite.
 unencrypted-storage = ["rusqlite/bundled"]
-# multi-threaded proving
+# Multi-threaded proving with rayon. Available on native and wasm32; on wasm32 it
+# needs a threaded build (shared memory plus a rayon pool), so the web SDK leaves
+# it off by default.
 parallel = [
     "dep:rayon",
     "ark-ff/parallel",
@@ -47,7 +49,6 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 futures-timer = "3"
 getrandom = { workspace = true, features = ["std"] }
 hkdf = { version = "0.13", optional = true }
-rayon = { version = "1.12", default-features = false, optional = true }
 reqwest = { workspace = true, features = ["rustls"] }
 # The storage features pick the SQLite build: `in_gecko` (`encrypted-storage`) tells
 # `libsqlite3-sys` to use the `sqlite3mc` C symbols compiled by `build.rs`, and `bundled`
@@ -104,6 +105,7 @@ ark-serialize = { workspace = true }
 ark-snark = { workspace = true }
 ark-std = { workspace = true }
 crypto_secretbox.workspace = true
+rayon = { version = "1.12", default-features = false, optional = true }
 ruint = { workspace = true }
 taceo-poseidon2 = { workspace = true }
 x25519-dalek = { version = "3.0", default-features = false, features = ["static_secrets"] }

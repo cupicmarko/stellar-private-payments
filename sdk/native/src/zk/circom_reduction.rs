@@ -27,7 +27,9 @@ use rayon::prelude::*;
 pub struct CircomReduction;
 
 // With the `parallel` feature, use `rayon` parallel iterators.
-// Otherwise (including all wasm32 builds), use the equivalent serial loops.
+// Otherwise, use the equivalent serial loops. The feature compiles on wasm32
+// too, but only does useful work there in a build with shared memory and a
+// rayon pool.
 impl R1CSToQAP for CircomReduction {
     #[allow(clippy::type_complexity)]
     fn instance_map_with_evaluation<F: PrimeField, D: EvaluationDomain<F>>(
