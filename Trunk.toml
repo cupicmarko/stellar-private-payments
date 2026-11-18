@@ -12,6 +12,9 @@ ignore = ["app/node_modules", "dist", "sdk/web/node_modules"]
 [serve]
 addresses = ["0.0.0.0"]
 port = 8000
+# Cross-origin isolation, so the prover can use its threaded worker (also what
+# app/js/sw.js adds where the host cannot send headers).
+headers = { "Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "require-corp" }
 
 [tools]
 tailwindcss = "4.3.3"
